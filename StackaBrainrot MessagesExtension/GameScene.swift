@@ -9,6 +9,8 @@ import SpriteKit
 
 final class GameScene: SKScene {
     
+    // MARK: - Constants
+    
     static let fixedSize = CGSize(width: 390, height: 844)
 
     private let brainrotTextureNames = [
@@ -19,21 +21,27 @@ final class GameScene: SKScene {
         "rhino", "sloth", "snake", "walrus", "whale", "zebra"
     ]
     
+    private let settleFramesRequired = 30
+    
+    // MARK: - Callbacks
+    
     var onBrainrotFellOff: (() -> Void)?
     var onSettled: (() -> Void)?
     
+    // MARK: - State
+    
     private var hoverBrainrot: SKSpriteNode?
     private var nextBrainrotId: Int = 0
-    
     private var settleFrameCount = 0
-    private let settleFramesRequired = 30  // ~0.5s at 60fps
     private var pendingReplayDrop: LastDrop?
-    private var pendingLiveDrop: (brainrotId: Int, normalizedX: CGFloat)?
+    private var pendingLiveDrop: (brainrotId: Int, normalizedX: CGFloat, rotation: CGFloat)?
     private var baseBlocksFrozenFrames = 0
     private var dropFrameCounter = 0
     private var droppedNodeName: String?
     
     private(set) var isSettled: Bool = false
+
+    // MARK: - Scene Lifecycle
 
     override func didMove(to view: SKView) {
         backgroundColor = .systemBackground
@@ -74,7 +82,7 @@ final class GameScene: SKScene {
             pendingLiveDrop = nil
             let x = frame.minX + drop.normalizedX * frame.width
             let y = frame.maxY - 40
-            let node = createBrainrot(brainrotId: drop.brainrotId, at: CGPoint(x: x, y: y), rotation: 0)
+            let node = createBrainrot(brainrotId: drop.brainrotId, at: CGPoint(x: x, y: y), rotation: drop.rotation)
             node.userData?["isDropping"] = true
             droppedNodeName = node.name
             dropFrameCounter = 0
@@ -131,6 +139,8 @@ final class GameScene: SKScene {
         }
     }
 
+    // MARK: - State Loading
+    
     func load(state: GameState) {
         children
             .filter { $0.name == "brainrot" }
@@ -173,6 +183,8 @@ final class GameScene: SKScene {
         addChild(node)
     }
     
+    // MARK: - Brainrot Creation
+    
     private func createBrainrot(brainrotId: Int, at position: CGPoint, rotation: CGFloat) -> SKSpriteNode {
         let texName = brainrotTextureNames[brainrotId % brainrotTextureNames.count]
         let node = SKSpriteNode(imageNamed: texName)
@@ -210,11 +222,12 @@ final class GameScene: SKScene {
         return node
     }
 
-    func dropBrainrot(brainrotId: Int, normalizedX: CGFloat) -> LastDrop {
+    // MARK: - Drop Handling
+    
+    func dropBrainrot(brainrotId: Int, normalizedX: CGFloat, rotation: CGFloat) -> LastDrop {
         let normalizedY: CGFloat = (frame.maxY - 40 - frame.minY) / frame.height
         
-        // Queue drop to spawn on next didSimulatePhysics (same as replay)
-        pendingLiveDrop = (brainrotId: brainrotId, normalizedX: normalizedX)
+        pendingLiveDrop = (brainrotId: brainrotId, normalizedX: normalizedX, rotation: rotation)
         
         settleFrameCount = 0
         isSettled = false
@@ -223,12 +236,14 @@ final class GameScene: SKScene {
             brainrotId: brainrotId,
             spawnX: Double(normalizedX),
             spawnY: Double(normalizedY),
-            spawnRotation: 0,
+            spawnRotation: Double(rotation),
             velocityX: 0,
             velocityY: 0,
             angularVelocity: 0
         )
     }
+    
+    // MARK: - Platform Setup
     
     private func addPlatform() {
         let platformWidth = frame.width * 0.8
@@ -246,6 +261,8 @@ final class GameScene: SKScene {
         
         addChild(p)
     }
+    
+    // MARK: - Block Management
     
     func getAllBlocks() -> [Block] {
         let blocks = children
@@ -282,11 +299,15 @@ final class GameScene: SKScene {
         }
     }
     
+    // MARK: - Hover Preview
+    
     func setNextBrainrotId(_ id: Int) {
         nextBrainrotId = id
     }
     
-    func updateHoverBrainrot(at normalizedX: CGFloat) {
+    func updateHoverBrainrot(at normalizedX: CGFloat, rotation: CGFloat) {
+        guard frame.width > 0 && frame.height > 0 else { return }
+        
         let x = frame.minX + normalizedX * frame.width
         let y = frame.maxY - 120
         
@@ -302,6 +323,7 @@ final class GameScene: SKScene {
         }
         
         hoverBrainrot?.position = CGPoint(x: x, y: y)
+        hoverBrainrot?.zRotation = rotation
         hoverBrainrot?.alpha = 0.8
     }
     

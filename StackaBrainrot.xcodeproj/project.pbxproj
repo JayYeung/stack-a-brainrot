@@ -236,7 +236,7 @@
 				DEVELOPMENT_TEAM = S73MMMY962;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "StackaBrainrot MessagesExtension/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = StackaBrainrot;
+				INFOPLIST_KEY_CFBundleDisplayName = "Stack a Brainrot";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -265,7 +265,7 @@
 				DEVELOPMENT_TEAM = S73MMMY962;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "StackaBrainrot MessagesExtension/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = StackaBrainrot;
+				INFOPLIST_KEY_CFBundleDisplayName = "Stack a Brainrot";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -414,6 +414,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = S73MMMY962;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Stack A Brainrot";
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -437,6 +438,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = S73MMMY962;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Stack A Brainrot";
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

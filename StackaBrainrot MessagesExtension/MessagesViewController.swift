@@ -10,9 +10,13 @@ import Messages
 
 final class MessagesViewController: MSMessagesAppViewController {
     
+    // MARK: - Properties
+    
     private let coordinator = GameCoordinator(debugMode: true)
     private let inviteVC = InviteViewController()
     private let gameVC = GameViewController()
+
+    // MARK: - Lifecycle
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -21,6 +25,8 @@ final class MessagesViewController: MSMessagesAppViewController {
         setupChildViewControllers()
         setupCoordinatorCallbacks()
     }
+    
+    // MARK: - Messages Extension Lifecycle
     
     override func willBecomeActive(with conversation: MSConversation) {
         coordinator.conversation = conversation
@@ -46,19 +52,25 @@ final class MessagesViewController: MSMessagesAppViewController {
                 let nextId = coordinator.getNextBrainrotId()
                 gameVC.setNextBrainrotId(nextId)
                 
-                let isSceneSettled = gameVC.isSceneSettled()
-                let canDrop = coordinator.canDrop(expandedView: true, isSceneSettled: isSceneSettled)
-                
-                if canDrop {
-                    gameVC.enableDropMode()
-                } else {
-                    gameVC.disableDropMode()
+                // Wait for scene to settle before enabling drop mode
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                    guard let self else { return }
+                    let isSceneSettled = self.gameVC.isSceneSettled()
+                    let canDrop = self.coordinator.canDrop(expandedView: true, isSceneSettled: isSceneSettled)
+                    
+                    if canDrop {
+                        self.gameVC.enableDropMode()
+                    } else {
+                        self.gameVC.disableDropMode()
+                    }
                 }
             }
         } else {
             gameVC.disableDropMode()
         }
     }
+    
+    // MARK: - Setup
     
     private func setupChildViewControllers() {
         addChild(inviteVC)
@@ -95,7 +107,7 @@ final class MessagesViewController: MSMessagesAppViewController {
             self.requestPresentationStyle(.compact)
         }
         
-        gameVC.onTapAtPosition = { [weak self] normalizedX in
+        gameVC.onTapAtPosition = { [weak self] normalizedX, rotation in
             guard let self else { return }
             let isSceneSettled = self.gameVC.isSceneSettled()
             guard self.coordinator.canDrop(expandedView: self.presentationStyle == .expanded, isSceneSettled: isSceneSettled) else { return }
@@ -110,7 +122,7 @@ final class MessagesViewController: MSMessagesAppViewController {
             
             guard let lastDrop else { return }
             
-            let actualDrop = self.gameVC.dropBrainrot(brainrotId: lastDrop.brainrotId, normalizedX: normalizedX)
+            let actualDrop = self.gameVC.dropBrainrot(brainrotId: lastDrop.brainrotId, normalizedX: normalizedX, rotation: rotation)
             
             self.gameVC.setOnSettled { [weak self] in
                 self?.coordinator.handleSettled(lastDrop: actualDrop)
@@ -144,6 +156,8 @@ final class MessagesViewController: MSMessagesAppViewController {
         }
     }
     
+    // MARK: - UI Updates
+    
     private func refreshUI(state: GameState?) {
         guard let state else {
             inviteVC.view.isHidden = false
@@ -169,18 +183,11 @@ final class MessagesViewController: MSMessagesAppViewController {
         let nextId = coordinator.getNextBrainrotId()
         gameVC.setNextBrainrotId(nextId)
         
-        let isSceneSettled = gameVC.isSceneSettled()
-        let canDrop = coordinator.canDrop(expandedView: presentationStyle == .expanded, isSceneSettled: isSceneSettled)
-        
-        if canDrop {
-            gameVC.enableDropMode()
-        } else {
-            gameVC.disableDropMode()
-        }
+        // Temporarily disable drop mode while scene settles
+        gameVC.disableDropMode()
         
         if state.lastDrop != nil {
-            gameVC.disableDropMode()
-            
+            // Scene is replaying, wait for it to settle
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
                 guard let self else { return }
                 self.coordinator.resetDropInProgress()
@@ -192,6 +199,20 @@ final class MessagesViewController: MSMessagesAppViewController {
                 let nextId = self.coordinator.getNextBrainrotId()
                 self.gameVC.setNextBrainrotId(nextId)
                 
+                // Wait a bit more for scene to fully settle
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    let isSceneSettled = self.gameVC.isSceneSettled()
+                    let canDrop = self.coordinator.canDrop(expandedView: self.presentationStyle == .expanded, isSceneSettled: isSceneSettled)
+                    
+                    if canDrop {
+                        self.gameVC.enableDropMode()
+                    }
+                }
+            }
+        } else {
+            // No replay needed, enable drop mode after scene settles
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                guard let self else { return }
                 let isSceneSettled = self.gameVC.isSceneSettled()
                 let canDrop = self.coordinator.canDrop(expandedView: self.presentationStyle == .expanded, isSceneSettled: isSceneSettled)
                 

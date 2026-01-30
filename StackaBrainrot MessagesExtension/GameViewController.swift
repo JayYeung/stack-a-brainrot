@@ -10,13 +10,20 @@ import SpriteKit
 
 final class GameViewController: UIViewController {
     
-    var onTapAtPosition: ((CGFloat) -> Void)?
+    // MARK: - Callbacks
+    
+    var onTapAtPosition: ((CGFloat, CGFloat) -> Void)?
     var onBrainrotFellOff: (() -> Void)?
+    
+    // MARK: - Properties
     
     private var skView: SKView?
     private var scene: GameScene?
     private var hoverPosition: CGFloat?
+    private var hoverRotation: CGFloat = 0
     private var canDrop: Bool = false
+    
+    // MARK: - UI Elements
     
     private let countLabel: UILabel = {
         let l = UILabel()
@@ -55,11 +62,15 @@ final class GameViewController: UIViewController {
         return l
     }()
     
+    // MARK: - Lifecycle
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
         setupUI()
     }
+    
+    // MARK: - UI Setup
     
     private func setupUI() {
         let sk = SKView()
@@ -112,6 +123,8 @@ final class GameViewController: UIViewController {
         self.skView = sk
     }
     
+    // MARK: - Scene Management
+    
     func ensureScene() {
         guard let skView else { return }
         if scene == nil {
@@ -127,6 +140,8 @@ final class GameViewController: UIViewController {
         }
     }
     
+    // MARK: - State Management
+    
     func loadState(_ state: GameState) {
         ensureScene()
         scene?.load(state: state)
@@ -134,12 +149,15 @@ final class GameViewController: UIViewController {
     }
     
     func setNextBrainrotId(_ id: Int) {
+        ensureScene()
         scene?.setNextBrainrotId(id)
     }
     
     func setPaused(_ paused: Bool) {
         skView?.isPaused = paused
     }
+    
+    // MARK: - UI Control
     
     func showMessage(_ text: String, color: UIColor) {
         messageLabel.text = text
@@ -172,9 +190,11 @@ final class GameViewController: UIViewController {
         }
     }
     
-    func dropBrainrot(brainrotId: Int, normalizedX: CGFloat) -> LastDrop? {
+    // MARK: - Drop Operations
+    
+    func dropBrainrot(brainrotId: Int, normalizedX: CGFloat, rotation: CGFloat) -> LastDrop? {
         scene?.hideHoverBrainrot()
-        return scene?.dropBrainrot(brainrotId: brainrotId, normalizedX: normalizedX)
+        return scene?.dropBrainrot(brainrotId: brainrotId, normalizedX: normalizedX, rotation: rotation)
     }
     
     func getAllBlocks() -> [Block] {
@@ -189,18 +209,18 @@ final class GameViewController: UIViewController {
         scene?.onSettled = callback
     }
     
+    // MARK: - Gesture Handlers
+    
     @objc private func didTapView(_ gr: UITapGestureRecognizer) {
-        guard let skView, canDrop else { return }
-        let pt = gr.location(in: skView)
-        let nx = max(0, min(1, pt.x / skView.bounds.width))
+        guard canDrop else { return }
         
-        hoverPosition = nx
-        scene?.updateHoverBrainrot(at: nx)
+        // Rotate by 45 degrees (π/4 radians) counter-clockwise
+        hoverRotation += .pi / 4
         
-        UIView.animate(withDuration: 0.2) { [weak self] in
-            self?.dropButton.alpha = 1
+        // If we have a position, update the hover with new rotation
+        if let pos = hoverPosition {
+            scene?.updateHoverBrainrot(at: pos, rotation: hoverRotation)
         }
-        dropButton.isEnabled = true
     }
     
     @objc private func didPanView(_ gr: UIPanGestureRecognizer) {
@@ -210,7 +230,7 @@ final class GameViewController: UIViewController {
         
         if gr.state == .began || gr.state == .changed {
             hoverPosition = nx
-            scene?.updateHoverBrainrot(at: nx)
+            scene?.updateHoverBrainrot(at: nx, rotation: hoverRotation)
             
             if dropButton.alpha == 0 {
                 UIView.animate(withDuration: 0.2) { [weak self] in
@@ -224,6 +244,8 @@ final class GameViewController: UIViewController {
     @objc private func didTapDropButton() {
         guard let nx = hoverPosition else { return }
         
+        let rotation = hoverRotation
+        
         scene?.hideHoverBrainrot()
         
         UIView.animate(withDuration: 0.2) { [weak self] in
@@ -231,26 +253,28 @@ final class GameViewController: UIViewController {
         }
         dropButton.isEnabled = false
         hoverPosition = nil
+        hoverRotation = 0
         canDrop = false
         
-        onTapAtPosition?(nx)
+        onTapAtPosition?(nx, rotation)
     }
+    
+    // MARK: - Drop Mode Control
     
     func enableDropMode() {
         ensureScene()
         canDrop = true
         hoverPosition = nil
+        hoverRotation = 0
         scene?.hideHoverBrainrot()
-        
-        UIView.animate(withDuration: 0.2) { [weak self] in
-            self?.dropButton.alpha = 0
-        }
+        dropButton.alpha = 0
         dropButton.isEnabled = false
     }
     
     func disableDropMode() {
         canDrop = false
         hoverPosition = nil
+        hoverRotation = 0
         scene?.hideHoverBrainrot()
         
         UIView.animate(withDuration: 0.2) { [weak self] in

@@ -11,6 +11,8 @@ import GameplayKit
 
 final class GameCoordinator {
     
+    // MARK: - Properties
+    
     private let debugMode: Bool
     private var currentState: GameState?
     private var dropInProgress = false
@@ -23,14 +25,20 @@ final class GameCoordinator {
     var onShowYourTurn: (() -> Void)?
     var onGameFinished: ((Bool) -> Void)?
     
+    // MARK: - Initialization
+    
     init(debugMode: Bool = true) {
         self.debugMode = debugMode
     }
+    
+    // MARK: - State Management
     
     func loadState(_ state: GameState?) {
         currentState = state
         dropInProgress = false
     }
+    
+    // MARK: - Game Creation
     
     func createInvite() -> GameState {
         let state = GameState(
@@ -53,6 +61,8 @@ final class GameCoordinator {
         let message = MessageCodec.makeMessage(state: state, session: MSSession())
         conversation.insert(message, completionHandler: nil)
     }
+    
+    // MARK: - Game Validation
     
     func shouldShowYourTurn() -> Bool {
         guard let state = currentState, state.lastDrop != nil else { return false }
@@ -81,6 +91,8 @@ final class GameCoordinator {
         let rng = GKMersenneTwisterRandomSource(seed: state.rngSeed)
         return rng.nextInt(upperBound: 30)
     }
+    
+    // MARK: - Drop Handling
     
     func handleDrop(brainrotId: Int, normalizedX: CGFloat, getAllBlocks: () -> [Block]) -> LastDrop? {
         guard var state = currentState else { return nil }
@@ -148,6 +160,8 @@ final class GameCoordinator {
         onRequestCompact?()
     }
     
+    // MARK: - Game End
+    
     func handleBrainrotFellOff() {
         guard var state = currentState else { return }
         guard state.phase == .active else { return }
@@ -174,6 +188,8 @@ final class GameCoordinator {
     func resetDropInProgress() {
         dropInProgress = false
     }
+    
+    // MARK: - Private Helpers
     
     private func localPlayerId() -> String {
         conversation?.localParticipantIdentifier.uuidString ?? ""
