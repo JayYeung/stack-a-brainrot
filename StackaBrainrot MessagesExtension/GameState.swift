@@ -23,7 +23,12 @@ struct Block: Codable {
 
 struct LastDrop: Codable {
     var brainrotId: Int
-    var dropX: Double   // normalized 0...1
+    var spawnX: Double   // normalized 0...1
+    var spawnY: Double   // normalized 0...1
+    var spawnRotation: Double
+    var velocityX: Double
+    var velocityY: Double
+    var angularVelocity: Double
 }
 
 struct GameState: Codable {
@@ -38,4 +43,6 @@ struct GameState: Codable {
     var blocks: [Block]      // settled positions of all blocks BEFORE last drop
     var lastDrop: LastDrop?  // the most recent drop to replay
     var winner: String?      // player who won (loser's brainrot fell off)
+    
+    var rngSeed: UInt64      // for deterministic randomness
 }

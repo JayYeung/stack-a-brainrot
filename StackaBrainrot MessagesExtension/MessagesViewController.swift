@@ -8,6 +8,7 @@
 import UIKit
 import Messages
 import SpriteKit
+import GameplayKit
 
 final class MessagesViewController: MSMessagesAppViewController {
 
@@ -293,7 +294,8 @@ final class MessagesViewController: MSMessagesAppViewController {
             nextPlayer: "",
             blocks: [],
             lastDrop: nil,
-            winner: nil
+            winner: nil,
+            rngSeed: UInt64.random(in: 0...UInt64.max)
         )
 
         let message = MessageCodec.makeMessage(state: state, session: MSSession())
@@ -324,6 +326,7 @@ final class MessagesViewController: MSMessagesAppViewController {
             state.blocks = []
             state.lastDrop = nil
             state.winner = nil
+            state.rngSeed = UInt64.random(in: 0...UInt64.max)
             requestPresentationStyle(.expanded)
         }
         
@@ -341,8 +344,12 @@ final class MessagesViewController: MSMessagesAppViewController {
         let pt = gr.location(in: skView)
         let nx = max(0, min(1, pt.x / skView.bounds.width)) // 0..1
 
-        // choose brainrot (random for MVP)
-        let brainrotId = Int.random(in: 0..<30)
+        // Use seeded RNG for deterministic brainrot selection
+        let rng = GKMersenneTwisterRandomSource(seed: state.rngSeed)
+        let brainrotId = rng.nextInt(upperBound: 30)
+        
+        // Update seed for next drop (use nextUniform for UInt64)
+        state.rngSeed = UInt64(bitPattern: Int64(rng.nextInt()))
 
         // Mark drop in progress
         dropInProgress = true
@@ -353,12 +360,12 @@ final class MessagesViewController: MSMessagesAppViewController {
         // update count
         state.count += 1
 
-        // local drop immediately
-        scene?.dropBrainrot(brainrotId: brainrotId, normalizedX: CGFloat(nx))
+        // local drop immediately - returns spawn info
+        let dropInfo = scene?.dropBrainrot(brainrotId: brainrotId, normalizedX: CGFloat(nx))
         
-        // Prepare state with settled blocks + last drop info
+        // Store drop info for replay
         state.blocks = settledBlocks
-        state.lastDrop = LastDrop(brainrotId: brainrotId, dropX: Double(nx))
+        state.lastDrop = dropInfo
         
         // flip turn
         if !state.player1.isEmpty && !state.player2.isEmpty {
@@ -367,8 +374,8 @@ final class MessagesViewController: MSMessagesAppViewController {
             state.nextPlayer = me
         }
 
-        // Wait for physics to settle before sending and minimizing
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+        // Wait for physics to settle using velocity-based detection
+        checkSettled(after: 0.5, maxWait: 3.0) { [weak self] in
             guard let self = self else { return }
             
             // send message with settled state + last drop
@@ -411,6 +418,60 @@ final class MessagesViewController: MSMessagesAppViewController {
         loadedState = state
         refreshUI()
         requestPresentationStyle(.compact)
+    }
+    
+    private func checkSettled(after minDelay: TimeInterval, maxWait: TimeInterval, completion: @escaping () -> Void) {
+        let startTime = Date()
+        let velocityThreshold: CGFloat = 0.5
+        let angularThreshold: CGFloat = 0.1
+        
+        func checkVelocities() {
+            guard let scene = scene else {
+                completion()
+                return
+            }
+            
+            let elapsed = Date().timeIntervalSince(startTime)
+            
+            // Force settle after max wait
+            if elapsed >= maxWait {
+                completion()
+                return
+            }
+            
+            // Don't check until min delay has passed
+            if elapsed < minDelay {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    checkVelocities()
+                }
+                return
+            }
+            
+            // Check if all brainrots are settled
+            var allSettled = true
+            for node in scene.children where node.name == "brainrot" {
+                if let body = node.physicsBody, body.isDynamic {
+                    let vel = body.velocity
+                    let speed = sqrt(vel.dx * vel.dx + vel.dy * vel.dy)
+                    let angVel = abs(body.angularVelocity)
+                    
+                    if speed > velocityThreshold || angVel > angularThreshold {
+                        allSettled = false
+                        break
+                    }
+                }
+            }
+            
+            if allSettled {
+                completion()
+            } else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    checkVelocities()
+                }
+            }
+        }
+        
+        checkVelocities()
     }
 }
 
