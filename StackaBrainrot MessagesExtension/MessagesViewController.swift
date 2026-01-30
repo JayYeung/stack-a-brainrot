@@ -7,6 +7,7 @@
 
 import UIKit
 import Messages
+import SpriteKit
 
 final class MessagesViewController: MSMessagesAppViewController {
 
@@ -15,6 +16,28 @@ final class MessagesViewController: MSMessagesAppViewController {
     
     // Set to true to allow playing both sides for single-device testing
     private let debugMode = true
+    
+    private var skView: SKView?
+    private var scene: GameScene?
+    private var dropInProgress = false
+    
+    // Your Turn notification
+    private let dimView: UIView = {
+        let v = UIView()
+        v.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+        v.alpha = 0
+        return v
+    }()
+    
+    private let yourTurnLabel: UILabel = {
+        let l = UILabel()
+        l.text = "Your Turn!"
+        l.font = .systemFont(ofSize: 48, weight: .bold)
+        l.textColor = .white
+        l.textAlignment = .center
+        l.alpha = 0
+        return l
+    }()
 
     // MARK: - Invite UI
     
@@ -53,23 +76,12 @@ final class MessagesViewController: MSMessagesAppViewController {
     
     private let gameContainerView = UIView()
     
-    private let gameStatusLabel: UILabel = {
+    private let brainrotCountLabel: UILabel = {
         let l = UILabel()
-        l.textAlignment = .center
-        l.numberOfLines = 0
-        l.font = .systemFont(ofSize: 18, weight: .semibold)
-        l.text = "Game"
+        l.font = .monospacedDigitSystemFont(ofSize: 32, weight: .bold)
+        l.textColor = .label
+        l.text = "0"
         return l
-    }()
-
-    private lazy var startGameButton: UIButton = {
-        var config = UIButton.Configuration.filled()
-        config.title = "Start Game"
-        config.cornerStyle = .large
-        config.baseBackgroundColor = .systemGreen
-        let b = UIButton(configuration: config)
-        b.addTarget(self, action: #selector(didTapPlay), for: .touchUpInside)
-        return b
     }()
 
     // MARK: - Lifecycle
@@ -84,6 +96,9 @@ final class MessagesViewController: MSMessagesAppViewController {
     
     override func willBecomeActive(with conversation: MSConversation) {
         currentConversation = conversation
+        
+        // Reset drop flag when reopening
+        dropInProgress = false
         
         if let msg = conversation.selectedMessage,
            let state = MessageCodec.decodeState(from: msg) {
@@ -123,29 +138,71 @@ final class MessagesViewController: MSMessagesAppViewController {
     private func setupGameUI() {
         gameContainerView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(gameContainerView)
+
+        let sk = SKView()
+        sk.translatesAutoresizingMaskIntoConstraints = false
+        gameContainerView.addSubview(sk)
         
-        let stack = UIStackView(arrangedSubviews: [gameStatusLabel, startGameButton])
-        stack.axis = .vertical
-        stack.spacing = 20
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        gameContainerView.addSubview(stack)
-        
+        brainrotCountLabel.translatesAutoresizingMaskIntoConstraints = false
+        gameContainerView.addSubview(brainrotCountLabel)
+
         NSLayoutConstraint.activate([
             gameContainerView.topAnchor.constraint(equalTo: view.topAnchor),
             gameContainerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             gameContainerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             gameContainerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            sk.topAnchor.constraint(equalTo: gameContainerView.topAnchor),
+            sk.leadingAnchor.constraint(equalTo: gameContainerView.leadingAnchor),
+            sk.trailingAnchor.constraint(equalTo: gameContainerView.trailingAnchor),
+            sk.bottomAnchor.constraint(equalTo: gameContainerView.bottomAnchor),
             
-            stack.centerXAnchor.constraint(equalTo: gameContainerView.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: gameContainerView.centerYAnchor),
-            stack.leadingAnchor.constraint(greaterThanOrEqualTo: gameContainerView.leadingAnchor, constant: 20),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: gameContainerView.trailingAnchor, constant: -20)
+            brainrotCountLabel.topAnchor.constraint(equalTo: gameContainerView.safeAreaLayoutGuide.topAnchor, constant: 16),
+            brainrotCountLabel.trailingAnchor.constraint(equalTo: gameContainerView.trailingAnchor, constant: -16)
+        ])
+
+        // Tap gesture to drop
+        let tap = UITapGestureRecognizer(target: self, action: #selector(didTapGameView(_:)))
+        sk.addGestureRecognizer(tap)
+
+        self.skView = sk
+        
+        // Setup Your Turn notification
+        dimView.translatesAutoresizingMaskIntoConstraints = false
+        gameContainerView.addSubview(dimView)
+        
+        yourTurnLabel.translatesAutoresizingMaskIntoConstraints = false
+        gameContainerView.addSubview(yourTurnLabel)
+        
+        NSLayoutConstraint.activate([
+            dimView.topAnchor.constraint(equalTo: gameContainerView.topAnchor),
+            dimView.leadingAnchor.constraint(equalTo: gameContainerView.leadingAnchor),
+            dimView.trailingAnchor.constraint(equalTo: gameContainerView.trailingAnchor),
+            dimView.bottomAnchor.constraint(equalTo: gameContainerView.bottomAnchor),
+            
+            yourTurnLabel.centerXAnchor.constraint(equalTo: gameContainerView.centerXAnchor),
+            yourTurnLabel.centerYAnchor.constraint(equalTo: gameContainerView.centerYAnchor)
         ])
         
         gameContainerView.isHidden = true
     }
 
     // MARK: - UI Updates
+    
+    private func ensureScene() {
+        guard let skView else { return }
+        if scene == nil {
+            let s = GameScene(size: skView.bounds.size)
+            s.scaleMode = .resizeFill
+            skView.presentScene(s)
+            scene = s
+        }
+        
+        // Always ensure callback is set
+        scene?.onBrainrotFellOff = { [weak self] in
+            self?.handleBrainrotFellOff()
+        }
+    }
 
     private func refreshUI() {
         guard let state = loadedState else {
@@ -156,25 +213,58 @@ final class MessagesViewController: MSMessagesAppViewController {
 
         inviteContainerView.isHidden = true
         gameContainerView.isHidden = false
-
-        let me = localPlayerId()
-        let isMyTurn = debugMode || state.nextPlayer.isEmpty || state.nextPlayer == me
-
-        switch state.phase {
-        case .pending:
-            gameStatusLabel.text = "Game Invite Received!\nReady to begin?"
-            startGameButton.setTitle("Start Game", for: .normal)
-            startGameButton.isEnabled = true
-
-        case .active:
-            if isMyTurn {
-                gameStatusLabel.text = "Your Turn!\nCount: \(state.count)"
-                startGameButton.setTitle("Play (\(state.count) → \(state.count + 1))", for: .normal)
-                startGameButton.isEnabled = true
-            } else {
-                gameStatusLabel.text = "Opponent's Turn\nCount: \(state.count)\n\nWaiting for them to play..."
-                startGameButton.setTitle("Waiting...", for: .normal)
-                startGameButton.isEnabled = false
+        
+        ensureScene()
+        scene?.load(state: state)
+        
+        brainrotCountLabel.text = "\(state.count)"
+        
+        // Handle finished state
+        if state.phase == .finished {
+            let me = localPlayerId()
+            let didIWin = state.winner == me
+            
+            yourTurnLabel.text = didIWin ? "You Win!" : "You Lose!"
+            yourTurnLabel.textColor = didIWin ? .systemGreen : .systemRed
+            
+            UIView.animate(withDuration: 0.3) { [weak self] in
+                self?.dimView.alpha = 1
+                self?.yourTurnLabel.alpha = 1
+            }
+            return
+        }
+        
+        // If there's a last drop being replayed, block new drops until it settles
+        if state.lastDrop != nil {
+            dropInProgress = true
+            
+            let me = localPlayerId()
+            let isMyTurn = debugMode || state.nextPlayer.isEmpty || state.nextPlayer == me
+            
+            // Show "Your Turn" message after replay settles (only if it's actually your turn)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+                guard let self = self else { return }
+                self.dropInProgress = false
+                
+                if isMyTurn {
+                    // Reset label style for turn notification
+                    self.yourTurnLabel.text = "Your Turn!"
+                    self.yourTurnLabel.textColor = .white
+                    
+                    // Show Your Turn notification
+                    UIView.animate(withDuration: 0.3) {
+                        self.dimView.alpha = 1
+                        self.yourTurnLabel.alpha = 1
+                    } completion: { _ in
+                        // Hide after 1 second
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            UIView.animate(withDuration: 0.3) {
+                                self.dimView.alpha = 0
+                                self.yourTurnLabel.alpha = 0
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -200,7 +290,10 @@ final class MessagesViewController: MSMessagesAppViewController {
             count: 0,
             player1: "",
             player2: "",
-            nextPlayer: ""
+            nextPlayer: "",
+            blocks: [],
+            lastDrop: nil,
+            winner: nil
         )
 
         let message = MessageCodec.makeMessage(state: state, session: MSSession())
@@ -210,47 +303,113 @@ final class MessagesViewController: MSMessagesAppViewController {
         requestPresentationStyle(.compact)
     }
 
-    @objc private func didTapPlay() {
-        guard let conversation = currentConversation,
+    @objc private func didTapGameView(_ gr: UITapGestureRecognizer) {
+        guard var state = loadedState,
+              let conversation = currentConversation,
               let selected = conversation.selectedMessage,
-              var state = loadedState
+              !dropInProgress,  // Prevent multiple drops
+              presentationStyle == .expanded  // Only allow drops in expanded view
         else { return }
 
         let me = localPlayerId()
         let opp = opponentId()
-
-        switch state.phase {
-        case .pending:
+        
+        // Auto-start game if pending
+        if state.phase == .pending {
             state.phase = .active
             state.player1 = me
             state.player2 = opp
-            state.count = 1
-            state.nextPlayer = opp.isEmpty ? me : opp
-
-        case .active:
-            if !debugMode && !state.nextPlayer.isEmpty && state.nextPlayer != me {
-                gameStatusLabel.text = "⚠️ Not your turn!\nWait for opponent to play."
-                return
-            }
-            
-            state.count += 1
-            
-            if !state.player1.isEmpty && !state.player2.isEmpty {
-                state.nextPlayer = (me == state.player1) ? state.player2 : state.player1
-            } else {
-                state.nextPlayer = me
-            }
+            state.nextPlayer = me
+            state.count = 0
+            state.blocks = []
+            state.lastDrop = nil
+            state.winner = nil
+            requestPresentationStyle(.expanded)
+        }
+        
+        // Don't allow drops if game is finished
+        if state.phase == .finished {
+            return
         }
 
-        let session = selected.session ?? MSSession()
-        let message = MessageCodec.makeMessage(state: state, session: session)
-        conversation.insert(message, completionHandler: nil)
+        // turn gate
+        if !debugMode && !state.nextPlayer.isEmpty && state.nextPlayer != me {
+            return
+        }
 
+        guard let skView else { return }
+        let pt = gr.location(in: skView)
+        let nx = max(0, min(1, pt.x / skView.bounds.width)) // 0..1
+
+        // choose brainrot (random for MVP)
+        let brainrotId = Int.random(in: 0..<30)
+
+        // Mark drop in progress
+        dropInProgress = true
+        
+        // Capture current settled state BEFORE dropping
+        let settledBlocks = scene?.getAllBlocks() ?? []
+        
+        // update count
+        state.count += 1
+
+        // local drop immediately
+        scene?.dropBrainrot(brainrotId: brainrotId, normalizedX: CGFloat(nx))
+        
+        // Prepare state with settled blocks + last drop info
+        state.blocks = settledBlocks
+        state.lastDrop = LastDrop(brainrotId: brainrotId, dropX: Double(nx))
+        
+        // flip turn
+        if !state.player1.isEmpty && !state.player2.isEmpty {
+            state.nextPlayer = (me == state.player1) ? state.player2 : state.player1
+        } else {
+            state.nextPlayer = me
+        }
+
+        // Wait for physics to settle before sending and minimizing
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            guard let self = self else { return }
+            
+            // send message with settled state + last drop
+            let session = selected.session ?? MSSession()
+            let msg = MessageCodec.makeMessage(state: state, session: session)
+            conversation.insert(msg, completionHandler: nil)
+
+            self.loadedState = state
+            self.refreshUI()
+            self.requestPresentationStyle(.compact)
+            
+            // Keep dropInProgress = true so you can't drop in minimized view
+            // It will reset when view reopens
+        }
+    }
+    
+    private func handleBrainrotFellOff() {
+        guard var state = loadedState,
+              state.phase == .active,
+              let conversation = currentConversation,
+              let selected = conversation.selectedMessage
+        else { return }
+        
+        let me = localPlayerId()
+        let opp = opponentId()
+        
+        // Current player loses (the one who just dropped)
+        // Winner is the other player
+        let loser = me
+        let winner = (loser == state.player1) ? state.player2 : state.player1
+        
+        state.phase = .finished
+        state.winner = winner
+        
+        // Send game over message
+        let session = selected.session ?? MSSession()
+        let msg = MessageCodec.makeMessage(state: state, session: session)
+        conversation.insert(msg, completionHandler: nil)
+        
         loadedState = state
         refreshUI()
-        
-        let moveType = state.count == 1 ? "Game started!" : "Move made!"
-        gameStatusLabel.text = "✓ \(moveType)\nCount: \(state.count)\n\nTap 'Send' to complete your turn."
         requestPresentationStyle(.compact)
     }
 }
