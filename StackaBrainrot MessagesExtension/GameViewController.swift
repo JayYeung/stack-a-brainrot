@@ -15,6 +15,8 @@ final class GameViewController: UIViewController {
     
     private var skView: SKView?
     private var scene: GameScene?
+    private var hoverPosition: CGFloat?
+    private var canDrop: Bool = false
     
     private let countLabel: UILabel = {
         let l = UILabel()
@@ -22,6 +24,18 @@ final class GameViewController: UIViewController {
         l.textColor = .label
         l.text = "0"
         return l
+    }()
+    
+    private let dropButton: UIButton = {
+        let btn = UIButton(type: .system)
+        btn.setTitle("DROP", for: .normal)
+        btn.titleLabel?.font = .systemFont(ofSize: 24, weight: .bold)
+        btn.backgroundColor = .systemBlue
+        btn.setTitleColor(.white, for: .normal)
+        btn.layer.cornerRadius = 12
+        btn.alpha = 0
+        btn.isEnabled = false
+        return btn
     }()
     
     private let dimView: UIView = {
@@ -55,6 +69,9 @@ final class GameViewController: UIViewController {
         countLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(countLabel)
         
+        dropButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(dropButton)
+        
         dimView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(dimView)
         
@@ -70,6 +87,11 @@ final class GameViewController: UIViewController {
             countLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
             countLabel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
             
+            dropButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
+            dropButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            dropButton.widthAnchor.constraint(equalToConstant: 100),
+            dropButton.heightAnchor.constraint(equalToConstant: 44),
+            
             dimView.topAnchor.constraint(equalTo: view.topAnchor),
             dimView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             dimView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -81,6 +103,11 @@ final class GameViewController: UIViewController {
         
         let tap = UITapGestureRecognizer(target: self, action: #selector(didTapView(_:)))
         sk.addGestureRecognizer(tap)
+        
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(didPanView(_:)))
+        sk.addGestureRecognizer(pan)
+        
+        dropButton.addTarget(self, action: #selector(didTapDropButton), for: .touchUpInside)
         
         self.skView = sk
     }
@@ -104,6 +131,10 @@ final class GameViewController: UIViewController {
         ensureScene()
         scene?.load(state: state)
         countLabel.text = "\(state.count)"
+    }
+    
+    func setNextBrainrotId(_ id: Int) {
+        scene?.setNextBrainrotId(id)
     }
     
     func setPaused(_ paused: Bool) {
@@ -142,6 +173,7 @@ final class GameViewController: UIViewController {
     }
     
     func dropBrainrot(brainrotId: Int, normalizedX: CGFloat) -> LastDrop? {
+        scene?.hideHoverBrainrot()
         return scene?.dropBrainrot(brainrotId: brainrotId, normalizedX: normalizedX)
     }
     
@@ -158,9 +190,72 @@ final class GameViewController: UIViewController {
     }
     
     @objc private func didTapView(_ gr: UITapGestureRecognizer) {
-        guard let skView else { return }
+        guard let skView, canDrop else { return }
         let pt = gr.location(in: skView)
         let nx = max(0, min(1, pt.x / skView.bounds.width))
+        
+        hoverPosition = nx
+        scene?.updateHoverBrainrot(at: nx)
+        
+        UIView.animate(withDuration: 0.2) { [weak self] in
+            self?.dropButton.alpha = 1
+        }
+        dropButton.isEnabled = true
+    }
+    
+    @objc private func didPanView(_ gr: UIPanGestureRecognizer) {
+        guard let skView, canDrop else { return }
+        let pt = gr.location(in: skView)
+        let nx = max(0, min(1, pt.x / skView.bounds.width))
+        
+        if gr.state == .began || gr.state == .changed {
+            hoverPosition = nx
+            scene?.updateHoverBrainrot(at: nx)
+            
+            if dropButton.alpha == 0 {
+                UIView.animate(withDuration: 0.2) { [weak self] in
+                    self?.dropButton.alpha = 1
+                }
+            }
+            dropButton.isEnabled = true
+        }
+    }
+    
+    @objc private func didTapDropButton() {
+        guard let nx = hoverPosition else { return }
+        
+        scene?.hideHoverBrainrot()
+        
+        UIView.animate(withDuration: 0.2) { [weak self] in
+            self?.dropButton.alpha = 0
+        }
+        dropButton.isEnabled = false
+        hoverPosition = nil
+        canDrop = false
+        
         onTapAtPosition?(nx)
+    }
+    
+    func enableDropMode() {
+        ensureScene()
+        canDrop = true
+        hoverPosition = nil
+        scene?.hideHoverBrainrot()
+        
+        UIView.animate(withDuration: 0.2) { [weak self] in
+            self?.dropButton.alpha = 0
+        }
+        dropButton.isEnabled = false
+    }
+    
+    func disableDropMode() {
+        canDrop = false
+        hoverPosition = nil
+        scene?.hideHoverBrainrot()
+        
+        UIView.animate(withDuration: 0.2) { [weak self] in
+            self?.dropButton.alpha = 0
+        }
+        dropButton.isEnabled = false
     }
 }

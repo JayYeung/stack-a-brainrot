@@ -76,7 +76,13 @@ final class GameCoordinator {
         return true
     }
     
-    func handleDrop(normalizedX: CGFloat, getAllBlocks: () -> [Block]) -> LastDrop? {
+    func getNextBrainrotId() -> Int {
+        guard let state = currentState else { return 0 }
+        let rng = GKMersenneTwisterRandomSource(seed: state.rngSeed)
+        return rng.nextInt(upperBound: 30)
+    }
+    
+    func handleDrop(brainrotId: Int, normalizedX: CGFloat, getAllBlocks: () -> [Block]) -> LastDrop? {
         guard var state = currentState else { return nil }
         guard let conversation else { return nil }
         guard let selected = conversation.selectedMessage else { return nil }
@@ -98,7 +104,7 @@ final class GameCoordinator {
         }
         
         let rng = GKMersenneTwisterRandomSource(seed: state.rngSeed)
-        let brainrotId = rng.nextInt(upperBound: 30)
+        _ = rng.nextInt(upperBound: 30)  // Consume the RNG to stay in sync
         state.rngSeed = UInt64(bitPattern: Int64(rng.nextInt()))
         
         dropInProgress = true

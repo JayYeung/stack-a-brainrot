@@ -40,6 +40,24 @@ final class MessagesViewController: MSMessagesAppViewController {
     override func didTransition(to presentationStyle: MSMessagesAppPresentationStyle) {
         super.didTransition(to: presentationStyle)
         gameVC.setPaused(presentationStyle != .expanded)
+        
+        if presentationStyle == .expanded {
+            if let state = coordinator.conversation?.selectedMessage.flatMap({ MessageCodec.decodeState(from: $0) }) {
+                let nextId = coordinator.getNextBrainrotId()
+                gameVC.setNextBrainrotId(nextId)
+                
+                let isSceneSettled = gameVC.isSceneSettled()
+                let canDrop = coordinator.canDrop(expandedView: true, isSceneSettled: isSceneSettled)
+                
+                if canDrop {
+                    gameVC.enableDropMode()
+                } else {
+                    gameVC.disableDropMode()
+                }
+            }
+        } else {
+            gameVC.disableDropMode()
+        }
     }
     
     private func setupChildViewControllers() {
@@ -82,7 +100,10 @@ final class MessagesViewController: MSMessagesAppViewController {
             let isSceneSettled = self.gameVC.isSceneSettled()
             guard self.coordinator.canDrop(expandedView: self.presentationStyle == .expanded, isSceneSettled: isSceneSettled) else { return }
             
+            let brainrotId = self.coordinator.getNextBrainrotId()
+            
             let lastDrop = self.coordinator.handleDrop(
+                brainrotId: brainrotId,
                 normalizedX: normalizedX,
                 getAllBlocks: { self.gameVC.getAllBlocks() }
             )
@@ -127,6 +148,7 @@ final class MessagesViewController: MSMessagesAppViewController {
         guard let state else {
             inviteVC.view.isHidden = false
             gameVC.view.isHidden = true
+            gameVC.disableDropMode()
             return
         }
         
@@ -140,16 +162,41 @@ final class MessagesViewController: MSMessagesAppViewController {
             let message = didIWin ? "You Win!" : "You Lose!"
             let color: UIColor = didIWin ? .systemGreen : .systemRed
             gameVC.showMessage(message, color: color)
+            gameVC.disableDropMode()
             return
         }
         
+        let nextId = coordinator.getNextBrainrotId()
+        gameVC.setNextBrainrotId(nextId)
+        
+        let isSceneSettled = gameVC.isSceneSettled()
+        let canDrop = coordinator.canDrop(expandedView: presentationStyle == .expanded, isSceneSettled: isSceneSettled)
+        
+        if canDrop {
+            gameVC.enableDropMode()
+        } else {
+            gameVC.disableDropMode()
+        }
+        
         if state.lastDrop != nil {
+            gameVC.disableDropMode()
+            
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
                 guard let self else { return }
                 self.coordinator.resetDropInProgress()
                 
                 if self.coordinator.shouldShowYourTurn() {
                     self.gameVC.showYourTurnMessage()
+                }
+                
+                let nextId = self.coordinator.getNextBrainrotId()
+                self.gameVC.setNextBrainrotId(nextId)
+                
+                let isSceneSettled = self.gameVC.isSceneSettled()
+                let canDrop = self.coordinator.canDrop(expandedView: self.presentationStyle == .expanded, isSceneSettled: isSceneSettled)
+                
+                if canDrop {
+                    self.gameVC.enableDropMode()
                 }
             }
         }

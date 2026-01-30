@@ -22,6 +22,9 @@ final class GameScene: SKScene {
     var onBrainrotFellOff: (() -> Void)?
     var onSettled: (() -> Void)?
     
+    private var hoverBrainrot: SKSpriteNode?
+    private var nextBrainrotId: Int = 0
+    
     private var settleFrameCount = 0
     private let settleFramesRequired = 30  // ~0.5s at 60fps
     private var pendingReplayDrop: LastDrop?
@@ -277,5 +280,33 @@ final class GameScene: SKScene {
             if abs($0.x - $1.x) > 0.001 { return $0.x < $1.x }
             return $0.brainrotId < $1.brainrotId
         }
+    }
+    
+    func setNextBrainrotId(_ id: Int) {
+        nextBrainrotId = id
+    }
+    
+    func updateHoverBrainrot(at normalizedX: CGFloat) {
+        let x = frame.minX + normalizedX * frame.width
+        let y = frame.maxY - 120
+        
+        if hoverBrainrot == nil {
+            let texName = brainrotTextureNames[nextBrainrotId % brainrotTextureNames.count]
+            let node = SKSpriteNode(imageNamed: texName)
+            node.name = "hover"
+            node.setScale(0.65)
+            node.alpha = 0.8
+            node.zPosition = 1000
+            hoverBrainrot = node
+            addChild(node)
+        }
+        
+        hoverBrainrot?.position = CGPoint(x: x, y: y)
+        hoverBrainrot?.alpha = 0.8
+    }
+    
+    func hideHoverBrainrot() {
+        hoverBrainrot?.removeFromParent()
+        hoverBrainrot = nil
     }
 }
