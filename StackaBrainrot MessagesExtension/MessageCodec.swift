@@ -51,7 +51,6 @@ enum MessageCodec {
 
     private static func encodeStateToBase64URL(_ state: GameState) -> String {
         let enc = JSONEncoder()
-        // Keep payload small
         enc.outputFormatting = []
         let data = (try? enc.encode(state)) ?? Data()
         return base64URLEncode(data)
@@ -74,7 +73,6 @@ enum MessageCodec {
             .replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
 
-        // pad to multiple of 4
         let pad = 4 - (b64.count % 4)
         if pad < 4 { b64 += String(repeating: "=", count: pad) }
 
