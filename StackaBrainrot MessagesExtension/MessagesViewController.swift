@@ -79,7 +79,8 @@ final class MessagesViewController: MSMessagesAppViewController {
         
         gameVC.onTapAtPosition = { [weak self] normalizedX in
             guard let self else { return }
-            guard self.coordinator.canDrop(expandedView: self.presentationStyle == .expanded) else { return }
+            let isSceneSettled = self.gameVC.isSceneSettled()
+            guard self.coordinator.canDrop(expandedView: self.presentationStyle == .expanded, isSceneSettled: isSceneSettled) else { return }
             
             let lastDrop = self.coordinator.handleDrop(
                 normalizedX: normalizedX,

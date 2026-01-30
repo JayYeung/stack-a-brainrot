@@ -149,6 +149,10 @@ final class GameViewController: UIViewController {
         return scene?.getAllBlocks() ?? []
     }
     
+    func isSceneSettled() -> Bool {
+        return scene?.isSettled ?? false
+    }
+    
     func setOnSettled(_ callback: @escaping () -> Void) {
         scene?.onSettled = callback
     }

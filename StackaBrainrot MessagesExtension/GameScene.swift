@@ -9,7 +9,6 @@ import SpriteKit
 
 final class GameScene: SKScene {
     
-    // Fixed logical scene size for deterministic physics
     static let fixedSize = CGSize(width: 390, height: 844)
 
     private let brainrotTextureNames = [
@@ -26,6 +25,12 @@ final class GameScene: SKScene {
     private var settleFrameCount = 0
     private let settleFramesRequired = 30  // ~0.5s at 60fps
     private var pendingReplayDrop: LastDrop?
+    private var pendingLiveDrop: (brainrotId: Int, normalizedX: CGFloat)?
+    private var baseBlocksFrozenFrames = 0
+    private var dropFrameCounter = 0
+    private var droppedNodeName: String?
+    
+    private(set) var isSettled: Bool = false
 
     override func didMove(to view: SKView) {
         backgroundColor = .systemBackground
@@ -44,11 +49,49 @@ final class GameScene: SKScene {
     }
     
     override func didSimulatePhysics() {
+        if baseBlocksFrozenFrames > 0 {
+            baseBlocksFrozenFrames -= 1
+            if baseBlocksFrozenFrames == 0 {
+                for node in children where node.name == "brainrot" && node.userData?["isBaseBlock"] as? Bool == true {
+                    node.physicsBody?.isDynamic = true
+                }
+            }
+            return
+        }
+        
         if let drop = pendingReplayDrop {
             pendingReplayDrop = nil
             spawnReplayDrop(drop)
             settleFrameCount = 0
+            isSettled = false
             return
+        }
+        
+        if let drop = pendingLiveDrop {
+            pendingLiveDrop = nil
+            let x = frame.minX + drop.normalizedX * frame.width
+            let y = frame.maxY - 40
+            let node = createBrainrot(brainrotId: drop.brainrotId, at: CGPoint(x: x, y: y), rotation: 0)
+            node.userData?["isDropping"] = true
+            droppedNodeName = node.name
+            dropFrameCounter = 0
+            addChild(node)
+            settleFrameCount = 0
+            isSettled = false
+            return
+        }
+        
+        dropFrameCounter += 1
+        if dropFrameCounter == 15, let nodeName = droppedNodeName {
+            for node in children where node.name == nodeName && node.userData?["isDropping"] as? Bool == true {
+                node.userData?["isDropping"] = false
+                if let body = node.physicsBody {
+                    body.restitution = 0.01
+                    body.linearDamping = 0.7
+                    body.angularDamping = 1.5
+                }
+            }
+            droppedNodeName = nil
         }
         
         let velocityThreshold: CGFloat = 0.5
@@ -57,13 +100,16 @@ final class GameScene: SKScene {
         var allSettled = true
         for node in children where node.name == "brainrot" {
             if let body = node.physicsBody, body.isDynamic {
+                if abs(body.angularVelocity) > 6 {
+                    body.angularVelocity = 6 * (body.angularVelocity > 0 ? 1 : -1)
+                }
+                
                 let vel = body.velocity
                 let speed = sqrt(vel.dx * vel.dx + vel.dy * vel.dy)
                 let angVel = abs(body.angularVelocity)
                 
                 if speed > velocityThreshold || angVel > angularThreshold {
                     allSettled = false
-                    break
                 }
             }
         }
@@ -71,12 +117,14 @@ final class GameScene: SKScene {
         if allSettled {
             settleFrameCount += 1
             if settleFrameCount >= settleFramesRequired {
+                isSettled = true
                 if settleFrameCount == settleFramesRequired {
                     onSettled?()
                 }
             }
         } else {
             settleFrameCount = 0
+            isSettled = false
         }
     }
 
@@ -90,11 +138,16 @@ final class GameScene: SKScene {
             let y = frame.minY + CGFloat(block.y) * frame.height
             let node = createBrainrot(brainrotId: block.brainrotId, at: CGPoint(x: x, y: y), rotation: CGFloat(block.rotation))
             
-            node.physicsBody?.isDynamic = true
-            node.physicsBody?.velocity = .zero
-            node.physicsBody?.angularVelocity = 0
+            node.physicsBody?.isDynamic = false
+            node.userData?["isBaseBlock"] = true
+            node.physicsBody?.velocity = CGVector(dx: block.velocityX, dy: block.velocityY)
+            node.physicsBody?.angularVelocity = CGFloat(block.angularVelocity)
             
             addChild(node)
+        }
+        
+        if !state.blocks.isEmpty {
+            baseBlocksFrozenFrames = 1
         }
         
         if let lastDrop = state.lastDrop {
@@ -102,6 +155,7 @@ final class GameScene: SKScene {
         }
         
         settleFrameCount = 0
+        isSettled = false
     }
     
     private func spawnReplayDrop(_ drop: LastDrop) {
@@ -120,24 +174,34 @@ final class GameScene: SKScene {
         let texName = brainrotTextureNames[brainrotId % brainrotTextureNames.count]
         let node = SKSpriteNode(imageNamed: texName)
         node.name = "brainrot"
-        node.userData = ["brainrotId": brainrotId]
-        node.setScale(0.5)
+        node.userData = NSMutableDictionary()
+        node.userData?["brainrotId"] = brainrotId
+        node.setScale(0.65)
         node.position = position
         node.zRotation = rotation
         
         if let tex = node.texture {
             node.physicsBody = SKPhysicsBody(texture: tex,
-                                            size: CGSize(width: node.size.width * 0.95,
-                                                        height: node.size.height * 0.95))
+                                            size: CGSize(width: node.size.width * 0.90,
+                                                        height: node.size.height * 0.90))
         } else {
             node.physicsBody = SKPhysicsBody(rectangleOf: node.size)
         }
         
         node.physicsBody?.isDynamic = true
-        node.physicsBody?.restitution = 0.01
-        node.physicsBody?.friction = 0.9
-        node.physicsBody?.linearDamping = 0.5
-        node.physicsBody?.angularDamping = 0.9
+        
+        let isDropping = node.userData?["isDropping"] as? Bool ?? false
+        if isDropping {
+            node.physicsBody?.restitution = 0.0
+            node.physicsBody?.linearDamping = 0.9
+            node.physicsBody?.angularDamping = 1.8
+        } else {
+            node.physicsBody?.restitution = 0.01
+            node.physicsBody?.linearDamping = 0.7
+            node.physicsBody?.angularDamping = 1.5
+        }
+        
+        node.physicsBody?.friction = 1.3
         node.physicsBody?.usesPreciseCollisionDetection = true
         
         return node
@@ -145,13 +209,12 @@ final class GameScene: SKScene {
 
     func dropBrainrot(brainrotId: Int, normalizedX: CGFloat) -> LastDrop {
         let normalizedY: CGFloat = (frame.maxY - 40 - frame.minY) / frame.height
-        let x = frame.minX + normalizedX * frame.width
-        let y = frame.maxY - 40
         
-        let node = createBrainrot(brainrotId: brainrotId, at: CGPoint(x: x, y: y), rotation: 0)
-        addChild(node)
+        // Queue drop to spawn on next didSimulatePhysics (same as replay)
+        pendingLiveDrop = (brainrotId: brainrotId, normalizedX: normalizedX)
         
         settleFrameCount = 0
+        isSettled = false
         
         return LastDrop(
             brainrotId: brainrotId,
@@ -171,16 +234,18 @@ final class GameScene: SKScene {
         let p = SKSpriteNode(color: .systemGray, size: CGSize(width: platformWidth, height: platformHeight))
         p.position = CGPoint(x: frame.midX, y: frame.minY + 60)
 
-        p.physicsBody = SKPhysicsBody(rectangleOf: p.size)
+        p.physicsBody = SKPhysicsBody(rectangleOf: CGSize(width: platformWidth, height: platformHeight + 4))
         p.physicsBody?.isDynamic = false
         p.physicsBody?.restitution = 0.0
-        p.physicsBody?.friction = 1.5
+        p.physicsBody?.friction = 2.0
+        p.physicsBody?.linearDamping = 0
+        p.physicsBody?.angularDamping = 0
         
         addChild(p)
     }
     
     func getAllBlocks() -> [Block] {
-        return children
+        let blocks = children
             .filter { $0.name == "brainrot" }
             .compactMap { node -> Block? in
                 guard let brainrotId = node.userData?["brainrotId"] as? Int
@@ -188,13 +253,29 @@ final class GameScene: SKScene {
                 
                 let nx = (node.position.x - frame.minX) / frame.width
                 let ny = (node.position.y - frame.minY) / frame.height
+                let vx = node.physicsBody?.velocity.dx ?? 0
+                let vy = node.physicsBody?.velocity.dy ?? 0
+                let av = node.physicsBody?.angularVelocity ?? 0
+                
+                let quantize = { (val: CGFloat, scale: CGFloat) -> Double in
+                    return Double((val * scale).rounded() / scale)
+                }
                 
                 return Block(
                     brainrotId: brainrotId,
-                    x: Double(nx),
-                    y: Double(ny),
-                    rotation: Double(node.zRotation)
+                    x: quantize(nx, 1000),
+                    y: quantize(ny, 1000),
+                    rotation: quantize(node.zRotation, 10000),
+                    velocityX: quantize(vx, 1000),
+                    velocityY: quantize(vy, 1000),
+                    angularVelocity: quantize(av, 1000)
                 )
             }
+        
+        return blocks.sorted {
+            if abs($0.y - $1.y) > 0.001 { return $0.y < $1.y }
+            if abs($0.x - $1.x) > 0.001 { return $0.x < $1.x }
+            return $0.brainrotId < $1.brainrotId
+        }
     }
 }

@@ -61,11 +61,12 @@ final class GameCoordinator {
         return isMyTurn
     }
     
-    func canDrop(expandedView: Bool) -> Bool {
+    func canDrop(expandedView: Bool, isSceneSettled: Bool) -> Bool {
         guard let state = currentState else { return false }
         guard !dropInProgress else { return false }
         guard expandedView else { return false }
         guard state.phase != .finished else { return false }
+        guard isSceneSettled else { return false }
         
         let me = localPlayerId()
         if !debugMode && !state.nextPlayer.isEmpty && state.nextPlayer != me {

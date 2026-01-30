@@ -19,6 +19,9 @@ struct Block: Codable {
     var x: Double       // normalized 0...1
     var y: Double       // normalized 0...1
     var rotation: Double // radians
+    var velocityX: Double
+    var velocityY: Double
+    var angularVelocity: Double
 }
 
 struct LastDrop: Codable {
