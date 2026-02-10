@@ -89,7 +89,7 @@ final class GameCoordinator {
     func getNextBrainrotId() -> Int {
         guard let state = currentState else { return 0 }
         let rng = GKMersenneTwisterRandomSource(seed: state.rngSeed)
-        return rng.nextInt(upperBound: 30)
+        return rng.nextInt(upperBound: 200)
     }
     
     // MARK: - Drop Handling

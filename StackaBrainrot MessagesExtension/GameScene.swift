@@ -13,13 +13,16 @@ final class GameScene: SKScene {
     
     static let fixedSize = CGSize(width: 390, height: 844)
 
-    private let brainrotTextureNames = [
-        "bear", "buffalo", "chick", "chicken", "cow", "crocodile",
-        "dog", "duck", "elephant", "frog", "giraffe", "goat",
-        "gorilla", "hippo", "horse", "monkey", "moose", "narwhal",
-        "owl", "panda", "parrot", "penguin", "pig", "rabbit",
-        "rhino", "sloth", "snake", "walrus", "whale", "zebra"
-    ]
+    // private let brainrotTextureNames = [
+    //     "bear", "buffalo", "chick", "chicken", "cow", "crocodile",
+    //     "dog", "duck", "elephant", "frog", "giraffe", "goat",
+    //     "gorilla", "hippo", "horse", "monkey", "moose", "narwhal",
+    //     "owl", "panda", "parrot", "penguin", "pig", "rabbit",
+    //     "rhino", "sloth", "snake", "walrus", "whale", "zebra"
+    // ]
+    private let brainrotTextureNames: [String] = {
+        return (1...163).map { String(format: "genericItem_color_%03d", $0) }
+    }()
     
     private let settleFramesRequired = 30
     
